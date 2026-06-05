@@ -1,11 +1,14 @@
 package dev.chunkypregen;
 
+import dev.chunkypregen.monitor.HudData;
 import net.caffeinemc.mods.sodium.client.gui.VideoSettingsScreen;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.text.Text;
@@ -47,10 +50,10 @@ public class ChunkyPregenClient implements ClientModInitializer {
     private static volatile long lastRdCycleTriggerMs  =  0L;
     private static final    long RD_CYCLE_COOLDOWN_MS  = 90_000L;
 
-    private static final int RD_MAX              = 32; // force-rebuild RD (reduced from 85, no flush step)
+    private static final int RD_MAX              = 32; // force-rebuild RD (no flush step)
     private static final int RD_RESTORE          =  3; // settle RD
     private static final int DELAY_BEFORE_EXPAND = 20; // 1s — brief settle before jumping to RD_MAX
-    private static final int DELAY_AT_MAX        = 200; // 10s — hold at RD_MAX for Voxy to rebuild
+    // DELAY_AT_MAX is read from config (lodRefreshSeconds * 20) at cycle trigger time
 
     /**
      * Called by GenerationTracker (server thread) whenever a new bundle starts. Thread-safe.
@@ -68,9 +71,10 @@ public class ChunkyPregenClient implements ClientModInitializer {
                     "Skipping duplicate.", elapsed / 1000, RD_CYCLE_COOLDOWN_MS / 1000);
             return;
         }
+        int delayAtMax = dev.chunkypregen.config.ChunkyPregenConfig.INSTANCE.lodRefreshSeconds * 20;
         ChunkyPregen.LOGGER.info("[ChunkyPregen] RD cycle triggered by generation bundle start. " +
                 "Sequence: RD={}→{} chunks over ~{}s total (no flush — no transparency flash).",
-                RD_MAX, RD_RESTORE, (DELAY_BEFORE_EXPAND + DELAY_AT_MAX) / 20);
+                RD_MAX, RD_RESTORE, (DELAY_BEFORE_EXPAND + delayAtMax) / 20);
         lastRdCycleTriggerMs = now;
         rdCyclePhase         = 0;
         rdCycleCountdown     = DELAY_BEFORE_EXPAND;
@@ -86,6 +90,8 @@ public class ChunkyPregenClient implements ClientModInitializer {
         ));
 
         ChunkyPregen.onGenerationBundleStart = ChunkyPregenClient::triggerRdCycle;
+
+        registerHud();
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             // Open-settings keybind
@@ -112,9 +118,10 @@ public class ChunkyPregenClient implements ClientModInitializer {
                     client.options.getViewDistance().setValue(RD_MAX);
                     client.options.write();
                     int rdAfter  = client.options.getViewDistance().getValue();
+                    int holdSecs = dev.chunkypregen.config.ChunkyPregenConfig.INSTANCE.lodRefreshSeconds;
                     ChunkyPregen.LOGGER.info("[ChunkyPregen] RD cycle phase 1/2 — expand. " +
                             "RD: {} → {} (expected {}). Holding for {}s.",
-                            rdBefore, rdAfter, RD_MAX, DELAY_AT_MAX / 20);
+                            rdBefore, rdAfter, RD_MAX, holdSecs);
                     if (rdAfter != RD_MAX)
                         ChunkyPregen.LOGGER.warn("[ChunkyPregen] RD expand MISMATCH: set {} but read back {}. " +
                                 "Sodium may have clamped the value.", RD_MAX, rdAfter);
@@ -122,7 +129,7 @@ public class ChunkyPregenClient implements ClientModInitializer {
                         client.player.sendMessage(
                             Text.literal("§7[ChunkyPregen] §fLOD refresh (1/2): rebuilding LOD (RD=" + rdAfter + ")… §7[brief lag normal]"), false);
                     rdCyclePhase     = 1;
-                    rdCycleCountdown = DELAY_AT_MAX;
+                    rdCycleCountdown = dev.chunkypregen.config.ChunkyPregenConfig.INSTANCE.lodRefreshSeconds * 20;
                 }
                 case 1 -> {
                     // Phase 2 — settle: return to normal gameplay render distance.
@@ -142,6 +149,61 @@ public class ChunkyPregenClient implements ClientModInitializer {
                     rdCyclePhase = -1;
                 }
             }
+        });
+    }
+
+    // ── HUD progress bar ──────────────────────────────────────────────────────
+
+    /**
+     * Registers a thin generation progress bar at the top of the screen.
+     *
+     * Visual layers (left to right):
+     *   1. Near-black background — full bar width
+     *   2. Muted dark green     — fraction of bundle already completed (completed rings)
+     *   3. Neon green           — current ring's progress within the bundle fraction
+     *   4. Grey flash           — briefly shown at 100% when bundle completes, then fades
+     *
+     * The bar is hidden when no generation is active and no recent completion flash.
+     */
+    private static void registerHud() {
+        HudRenderCallback.EVENT.register((drawContext, tickDelta) -> {
+            MinecraftClient client = MinecraftClient.getInstance();
+            if (client == null || client.world == null) return;
+
+            boolean active      = HudData.active;
+            long    flashMs     = HudData.completionFlashMs;
+            long    now         = System.currentTimeMillis();
+            boolean flashing    = flashMs > 0 && (now - flashMs) < HudData.COMPLETION_FLASH_MS;
+
+            if (!active && !flashing) return;
+
+            int screenW  = client.getWindow().getScaledWidth();
+            int barH     = 3;
+            int barY     = 0;
+
+            // Background
+            drawContext.fill(0, barY, screenW, barY + barH, 0xFF0A0A0A);
+
+            if (flashing) {
+                // Full grey bar — completion pulse
+                float alpha = 1f - (float)(now - flashMs) / HudData.COMPLETION_FLASH_MS;
+                int a = Math.max(0, Math.min(255, (int)(alpha * 255)));
+                int grey = (a << 24) | 0x555555;
+                drawContext.fill(0, barY, screenW, barY + barH, grey);
+                return;
+            }
+
+            // Dark green = completed rings
+            float completedF = HudData.completedFraction();
+            int completedPx  = (int)(screenW * completedF);
+            if (completedPx > 0)
+                drawContext.fill(0, barY, completedPx, barY + barH, 0xFF1A4520);
+
+            // Neon green = current ring partial progress
+            float partialF   = HudData.currentRingPartialFraction();
+            int partialPx    = (int)(screenW * partialF);
+            if (partialPx > 0)
+                drawContext.fill(completedPx, barY, completedPx + partialPx, barY + barH, 0xFF39FF14);
         });
     }
 }

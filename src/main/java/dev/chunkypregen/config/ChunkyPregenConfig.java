@@ -89,8 +89,16 @@ public class ChunkyPregenConfig {
 
     // ── Concurrency ───────────────────────────────────────────────────────────
     public int maxConcurrentDimensions = 1;
-    /** Number of Chunky worker threads. Defaults to 80% of logical CPU cores. */
-    public int chunkyThreads = Math.max(1, (int) Math.round(Runtime.getRuntime().availableProcessors() * 0.8));
+    /** Number of Chunky worker threads. Defaults to 25% of logical CPU cores. */
+    public int chunkyThreads = Math.max(1, (int) Math.round(Runtime.getRuntime().availableProcessors() * 0.25));
+
+    // ── LOD refresh ───────────────────────────────────────────────────────────
+    /**
+     * How long (seconds) to hold render distance at RD_MAX during the Voxy LOD
+     * rebuild cycle that fires at the start of each bundle.
+     * Range: 15–30. Default: 20.
+     */
+    public int lodRefreshSeconds = 20;
 
     // ── Voxy integration ──────────────────────────────────────────────────────
     /** Use Voxy's LOD render distance to drive generation radius and trigger distance. */
@@ -174,6 +182,7 @@ public class ChunkyPregenConfig {
             this.tpsResumeThreshold         = loaded.tpsResumeThreshold;
             this.maxConcurrentDimensions    = loaded.maxConcurrentDimensions;
             this.chunkyThreads              = loaded.chunkyThreads;
+            this.lodRefreshSeconds          = loaded.lodRefreshSeconds;
             this.voxyIntegration            = loaded.voxyIntegration;
             this.voxyRenderDistance         = loaded.voxyRenderDistance;
             this.voxyGenRadiusMultiplier    = loaded.voxyGenRadiusMultiplier;

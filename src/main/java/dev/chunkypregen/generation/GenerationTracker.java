@@ -392,6 +392,7 @@ public class GenerationTracker {
             batchCenter.put(dim, new BlockPos(center.getX(), 0, center.getZ()));
             batchRings.put(dim, rings);
             batchRingIndex.put(dim, 0);
+            dev.chunkypregen.monitor.HudData.onBundleStart(rings.size());
 
             if (cfg.debugMode)
                 debug(server, "Spiral batch: " + dimName(dim)
@@ -466,9 +467,13 @@ public class GenerationTracker {
         chunkyPollCountdown.put(dim, ChunkyIntegration.isAvailable() ? POLL_TICKS : FALLBACK_TIMEOUT_TICKS);
         runningTickCount.put(dim, 0);
         pollFalseStreak.put(dim, 0);
+        dev.chunkypregen.monitor.HudData.onRingAdvance(nextIndex);
 
+        // Log bundle-level completion percentage alongside ring info
+        float bundlePct = (float) nextIndex / total * 100f;
         if (cfg().debugMode)
             debug(server, "Spiral ring " + ringNumber + "/" + total
+                    + " (" + String.format("%.1f", bundlePct) + "% bundle)"
                     + " for " + dimName(dim)
                     + " (radius " + radius + " chunks)");
 
@@ -523,6 +528,7 @@ public class GenerationTracker {
             if (cfg().debugMode)
                 debug(server, "Spiral batch complete for " + dimName(dim)
                         + " (" + total + " rings)");
+            dev.chunkypregen.monitor.HudData.onBundleComplete();
             clearBatchState(dim);
         }
 
@@ -537,6 +543,7 @@ public class GenerationTracker {
     public static void cancelAll(MinecraftServer server) {
         execCmd(server, "chunky cancel");
         tpsPaused = false;
+        dev.chunkypregen.monitor.HudData.onBundleCancelled();
         for (RegistryKey<World> dim : ALL_DIMS) clearBatchState(dim);
         for (RegistryKey<World> dim : ALL_DIMS) {
             if (dimensionStates.getOrDefault(dim, DimensionState.IDLE) != DimensionState.IDLE)

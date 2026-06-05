@@ -46,6 +46,10 @@ public final class ProgressRelay {
         String eta   = m.group(4).trim();
         String rate  = m.group(5);
         latestProgress.put(dim, pct + "% — ETA " + eta + " — " + rate + " cps");
+        // Feed the HUD with the raw percentage so the progress bar can update live
+        try {
+            HudData.currentRingPct = Float.parseFloat(pct);
+        } catch (NumberFormatException ignored) {}
     }
 
     /** Call from the server tick event. Broadcasts a summary at the configured interval. */

@@ -464,6 +464,19 @@ public class ChunkyPregenConfigEntryPoint implements ConfigEntryPoint {
                 .setStorageHandler(cfg::save));
 
         page.addOptionGroup(relay);
+
+        OptionGroupBuilder lod = b.createOptionGroup().setName(Text.literal("LOD Refresh"));
+
+        lod.addOption(b.createIntegerOption(Identifier.of(ns, "lod_refresh_seconds"))
+                .setName(Text.literal("LOD Rebuild Hold Duration"))
+                .setTooltip(Text.literal("How long to hold render distance at RD=32 during the Voxy LOD rebuild cycle that fires at the start of each generation bundle. Longer = more time for Voxy to rebuild all LOD sections before returning to normal. Too short = some distant LOD may not update. Min: 15s, Max: 30s."))
+                .setRange(15, 30, 1)
+                .setDefaultValue(20)
+                .setValueFormatter(v -> Text.literal(v + "s"))
+                .setBinding(v -> { cfg.lodRefreshSeconds = v; cfg.save(); }, () -> cfg.lodRefreshSeconds)
+                .setStorageHandler(cfg::save));
+
+        page.addOptionGroup(lod);
         return page;
     }
 }
