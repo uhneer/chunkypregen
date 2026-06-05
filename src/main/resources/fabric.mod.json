@@ -17,11 +17,14 @@
     "fabricloader": ">=0.19.3",
     "fabric-api": "*",
     "minecraft": "~1.21.11",
-    "sodium": "*"
+    "chunky": "*"
+  },
+  "recommends": {
+    "sodium": "*",
+    "voxy": "*",
+    "chunky-offline": "*"
   },
   "suggests": {
-    "chunky": "*",
-    "modmenu": "*",
-    "voxy": "*"
+    "modmenu": "*"
   }
 }
