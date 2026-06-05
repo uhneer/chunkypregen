@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "chunkypregen",
+  "version": "${version}",
+  "name": "Chunky Pregenerator",
+  "description": "Automatically pre-generates chunks around the player using Chunky, per dimension, with configurable deadzone triggering and native Sodium settings integration.",
+  "authors": ["nonprofitism"],
+  "icon": "assets/chunkypregen/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["dev.chunkypregen.ChunkyPregen"],
+    "client": ["dev.chunkypregen.ChunkyPregenClient"],
+    "sodium:config_api_user": ["dev.chunkypregen.sodium.ChunkyPregenConfigEntryPoint"]
+  },
+  "mixins": ["chunkypregen.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.19.3",
+    "fabric-api": "*",
+    "minecraft": "~1.21.11",
+    "sodium": "*"
+  },
+  "suggests": {
+    "chunky": "*",
+    "modmenu": "*",
+    "voxy": "*"
+  }
+}
