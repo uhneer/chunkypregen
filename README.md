@@ -4,7 +4,7 @@
 
 A Fabric mod for Minecraft 1.21.11 that automatically pre-generates chunks around players using [Chunky](https://modrinth.com/plugin/chunky) as the generation backend. Runs completely in the background, survives restarts mid-spiral, and works on both singleplayer and dedicated servers.
 
-Vibecoded with Claude. MIT licensed.
+Vibecoded using Claude. MIT licensed. Yes, it's incredibly polished and there are minimal bugs. 
 
 ![screenshot1](images/screenshot1.png)
 ![screenshot2](images/screenshot2.png)
