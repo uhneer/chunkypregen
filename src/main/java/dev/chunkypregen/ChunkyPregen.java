@@ -77,12 +77,8 @@ public class ChunkyPregen implements ModInitializer {
             if (!StateSerializer.isWorldInitialized(server)) {
                 LOGGER.info("[ChunkyPregen] New world detected — starting initial pre-generation.");
                 StateSerializer.markWorldInitialized(server);
-                if (cfg.chatNotifications)
-                    server.getPlayerManager().broadcast(
-                        net.minecraft.text.Text.literal(
-                            "§6[ChunkyPregen] §fNew world! Starting automatic chunk pre-generation — " +
-                            "generation will run in the background. Use §e/chunkypregen status §fto monitor."),
-                        false);
+                // Broadcast is deferred to the join delay so it arrives after the client chat is ready.
+                // The start message fires when the first ring actually starts (~15s after join).
                 GenerationTracker.scheduleOnJoin(server, player, true);
             } else if (GenerationTracker.hasPendingResume()) {
                 // A previous session was interrupted mid-batch — resume from where it left off
@@ -100,8 +96,11 @@ public class ChunkyPregen implements ModInitializer {
             try {
                 String raw = message.getString();
                 if (ProgressRelay.isChunkyProgress(raw)) {
-                    ProgressRelay.update(raw);
-                    return false; // suppress per-second spam
+                    if (cfg.progressRelay) {
+                        ProgressRelay.update(raw);
+                        return false; // suppress and replace with periodic relay summary
+                    }
+                    // progressRelay off — let Chunky's native output through untouched
                 }
             } catch (Exception e) {
                 LOGGER.debug("[ChunkyPregen] Error processing game message", e);
