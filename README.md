@@ -51,12 +51,12 @@ It also forces a Voxy LOD rebuild at the start of each bundle by briefly expandi
 | [Fabric Loader](https://fabricmc.net/) | Yes | 0.19.3+ |
 | [Fabric API](https://modrinth.com/mod/fabric-api) | Yes | Any 1.21.11 build |
 | [Chunky](https://modrinth.com/plugin/chunky) | Yes | 1.4.55+ |
-| [Sodium](https://modrinth.com/mod/sodium) | Optional | In-game settings UI + LOD rebuild cycle |
+| [Sodium](https://modrinth.com/mod/sodium) | Yes | In-game settings UI + LOD rebuild cycle |
 | [Voxy](https://modrinth.com/mod/voxy) | Optional | Lets Voxy's render distance drive generation radius |
 
 [Chunky-Offline](https://modrinth.com/plugin/chunky-offline) is recommended alongside Chunky in singleplayer. It keeps Chunky running between world loads.
 
-Without Voxy, the mod uses the static `generationRadius` and `triggerDistance` from config. Without Sodium, the LOD rebuild cycle on bundle start is skipped.
+Without Voxy, the mod uses the static `generationRadius` and `triggerDistance` from config.
 
 ---
 
