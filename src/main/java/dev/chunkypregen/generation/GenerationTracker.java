@@ -124,6 +124,17 @@ public class GenerationTracker {
         lastCenters.clear();
         lastCenters.putAll(result.lastCenters());
         endVisited = result.endVisited();
+
+        // Restore HUD proximity indicator from saved last center
+        // Use Overworld center if available, otherwise the first available dim
+        dev.chunkypregen.monitor.HudData.triggerDistanceBlocks =
+                dev.chunkypregen.config.ChunkyPregenConfig.INSTANCE.triggerDistance;
+        BlockPos hudCenter = result.lastCenters().get(OVERWORLD);
+        if (hudCenter == null) hudCenter = result.lastCenters().values().stream().findFirst().orElse(null);
+        if (hudCenter != null) {
+            dev.chunkypregen.monitor.HudData.lastCenterX = hudCenter.getX();
+            dev.chunkypregen.monitor.HudData.lastCenterZ = hudCenter.getZ();
+        }
         dimensionStates.clear();
         jobQueue.clear();
         batchRings.clear();
@@ -379,6 +390,9 @@ public class GenerationTracker {
 
         ChunkyPregenConfig cfg = ChunkyPregenConfig.INSTANCE;
 
+        // Apply thread count directly to Chunky's internal thread pool before starting the job
+        ChunkyIntegration.setThreadCount(cfg.resolvedThreads());
+
         int targetRadius    = computeTargetRadius(dim);
         String radiusSource = describeRadiusSource(dim);
 
@@ -392,7 +406,7 @@ public class GenerationTracker {
             batchCenter.put(dim, new BlockPos(center.getX(), 0, center.getZ()));
             batchRings.put(dim, rings);
             batchRingIndex.put(dim, 0);
-            dev.chunkypregen.monitor.HudData.onBundleStart(rings.size());
+            dev.chunkypregen.monitor.HudData.onBundleStart(rings.size(), center.getX(), center.getZ());
 
             if (cfg.debugMode)
                 debug(server, "Spiral batch: " + dimName(dim)

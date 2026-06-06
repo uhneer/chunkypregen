@@ -89,7 +89,9 @@ public class ChunkyPregenConfig {
 
     // ── Concurrency ───────────────────────────────────────────────────────────
     public int maxConcurrentDimensions = 1;
-    /** Number of Chunky worker threads. Defaults to 25% of logical CPU cores. */
+    /** When true, chunkyThreads is ignored and 25% of logical CPU cores is used automatically. */
+    public boolean autoThreads = true;
+    /** Number of Chunky worker threads. Only used when autoThreads is false. */
     public int chunkyThreads = Math.max(1, (int) Math.round(Runtime.getRuntime().availableProcessors() * 0.25));
 
     // ── LOD refresh ───────────────────────────────────────────────────────────
@@ -99,6 +101,12 @@ public class ChunkyPregenConfig {
      * Range: 15–30. Default: 20.
      */
     public int lodRefreshSeconds = 20;
+
+    // ── HUD ───────────────────────────────────────────────────────────────────
+    /** Screen corner/position for the generation HUD widget. */
+    public HudPosition hudPosition = HudPosition.TOP_LEFT;
+    /** Scale multiplier for the HUD widget. 1.0 = default size. */
+    public float hudScale = 1.0f;
 
     // ── Voxy integration ──────────────────────────────────────────────────────
     /** Use Voxy's LOD render distance to drive generation radius and trigger distance. */
@@ -181,8 +189,11 @@ public class ChunkyPregenConfig {
             this.tpsPauseThreshold          = loaded.tpsPauseThreshold;
             this.tpsResumeThreshold         = loaded.tpsResumeThreshold;
             this.maxConcurrentDimensions    = loaded.maxConcurrentDimensions;
+            this.autoThreads                = loaded.autoThreads;
             this.chunkyThreads              = loaded.chunkyThreads;
             this.lodRefreshSeconds          = loaded.lodRefreshSeconds;
+            this.hudPosition                = loaded.hudPosition;
+            this.hudScale                   = loaded.hudScale;
             this.voxyIntegration            = loaded.voxyIntegration;
             this.voxyRenderDistance         = loaded.voxyRenderDistance;
             this.voxyGenRadiusMultiplier    = loaded.voxyGenRadiusMultiplier;
@@ -197,6 +208,13 @@ public class ChunkyPregenConfig {
         } catch (IOException e) {
             LOGGER.error("[ChunkyPregen] Failed to reload config", e);
         }
+    }
+
+    /** Returns the actual thread count that will be sent to Chunky, respecting autoThreads. */
+    public int resolvedThreads() {
+        if (autoThreads)
+            return Math.max(1, (int) Math.round(Runtime.getRuntime().availableProcessors() * 0.25));
+        return Math.max(1, chunkyThreads);
     }
 
     public void save() {

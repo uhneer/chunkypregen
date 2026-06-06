@@ -9,6 +9,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.text.Text;
@@ -152,58 +153,249 @@ public class ChunkyPregenClient implements ClientModInitializer {
         });
     }
 
-    // ── HUD progress bar ──────────────────────────────────────────────────────
+    // ── HUD widget ────────────────────────────────────────────────────────────
 
-    /**
-     * Registers a thin generation progress bar at the top of the screen.
-     *
-     * Visual layers (left to right):
-     *   1. Near-black background — full bar width
-     *   2. Muted dark green     — fraction of bundle already completed (completed rings)
-     *   3. Neon green           — current ring's progress within the bundle fraction
-     *   4. Grey flash           — briefly shown at 100% when bundle completes, then fades
-     *
-     * The bar is hidden when no generation is active and no recent completion flash.
-     */
+    // Base geometry (unscaled, at hudScale = 1.0)
+    private static final float BASE_WIDGET_R   = 35f;
+    private static final float BASE_RING_OUTER = 35f;
+    private static final float BASE_RING_INNER = 25f; // must equal BASE_PROX_R
+    private static final float BASE_PROX_R     = 25f;
+    private static final float BASE_DEAD_R     = 15f;
+    private static final int   PAD             = 6;
+
+    // Scaled geometry — rebuilt whenever hudScale changes
+    private static float scaledWidgetR   = BASE_WIDGET_R;
+    private static float scaledRingOuter = BASE_RING_OUTER;
+    private static float scaledRingInner = BASE_RING_INNER;
+    private static float scaledProxR     = BASE_PROX_R;
+    private static float scaledDeadR     = BASE_DEAD_R;
+    private static float lastBuiltScale  = -1f; // -1 forces first build
+
+    // Colours
+    private static final int COL_BG      = 0xCC080808;
+    private static final int COL_RING_BG = 0xFF0D150D;
+    private static final int COL_INNER   = 0xBB0A0A0A;
+    private static final int COL_DEAD    = 0xFF1A4520;
+    private static final int COL_TOP     = 0xFF4488FF; // blue — current ring %
+    private static final int COL_BOT     = 0xFF1A5020; // dark green — batch %
+    private static final int COL_FLASH   = 0xFF556655;
+    private static final int COL_CENTER  = 0xFF00FF44;
+
+    // Pre-computed geometry caches — built once, reused every frame
+    // Span format: int[] of (dx1, dy, dx2) triples — one fill() call per span
+    private static int[] bgSpans      = null; // background filled circle
+    private static int[] ringBgSpans  = null; // full ring background
+    private static int[] innerSpans   = null; // inner proximity circle
+    private static int[] deadzoneSpans = null; // thin deadzone ring
+
+    // Arc pixel caches — rebuilt only when progress values change meaningfully
+    // Pixel format: int[] of (dx, dy) pairs
+    private static int[] topArcPx    = null;
+    private static int[] botArcPx    = null;
+    private static float cachedTopPct = -1f;
+    private static float cachedBotPct = -1f;
+
+    private static void rebuildGeometry(float scale) {
+        scaledWidgetR   = BASE_WIDGET_R   * scale;
+        scaledRingOuter = BASE_RING_OUTER * scale;
+        scaledRingInner = BASE_RING_INNER * scale;
+        scaledProxR     = BASE_PROX_R     * scale;
+        scaledDeadR     = BASE_DEAD_R     * scale;
+        bgSpans       = buildCircleSpans(scaledWidgetR);
+        ringBgSpans   = buildRingSpans(scaledRingInner, scaledRingOuter);
+        innerSpans    = buildCircleSpans(scaledProxR);
+        deadzoneSpans = buildRingSpans(scaledDeadR - 1.5f * scale, scaledDeadR + 1.5f * scale);
+        // Invalidate arc caches so they rebuild at new scale
+        topArcPx = null; cachedTopPct = -1f;
+        botArcPx = null; cachedBotPct = -1f;
+        lastBuiltScale = scale;
+    }
+
     private static void registerHud() {
         HudRenderCallback.EVENT.register((drawContext, tickDelta) -> {
             MinecraftClient client = MinecraftClient.getInstance();
-            if (client == null || client.world == null) return;
+            if (client == null || client.world == null || client.player == null) return;
 
-            boolean active      = HudData.active;
-            long    flashMs     = HudData.completionFlashMs;
-            long    now         = System.currentTimeMillis();
-            boolean flashing    = flashMs > 0 && (now - flashMs) < HudData.COMPLETION_FLASH_MS;
+            // Rebuild geometry if scale changed (rare — only when user moves the slider)
+            float scale = dev.chunkypregen.config.ChunkyPregenConfig.INSTANCE.hudScale;
+            if (scale != lastBuiltScale) rebuildGeometry(scale);
 
-            if (!active && !flashing) return;
+            // Hide on F1, F3, ESC / any open screen
+            if (client.options.hudHidden) return;
+            if (client.currentScreen != null) return;
+            try {
+                if (client.getDebugHud().shouldShowDebugHud()) return;
+            } catch (Exception ignored) {}
 
-            int screenW  = client.getWindow().getScaledWidth();
-            int barH     = 3;
-            int barY     = 0;
+            boolean active   = HudData.active;
+            long    flashMs  = HudData.completionFlashMs;
+            long    now      = System.currentTimeMillis();
+            boolean flashing = flashMs > 0 && (now - flashMs) < HudData.COMPLETION_FLASH_MS;
+            boolean hasCenter = HudData.triggerDistanceBlocks > 0;
 
-            // Background
-            drawContext.fill(0, barY, screenW, barY + barH, 0xFF0A0A0A);
+            if (!active && !flashing && !hasCenter) return;
 
-            if (flashing) {
-                // Full grey bar — completion pulse
-                float alpha = 1f - (float)(now - flashMs) / HudData.COMPLETION_FLASH_MS;
-                int a = Math.max(0, Math.min(255, (int)(alpha * 255)));
-                int grey = (a << 24) | 0x555555;
-                drawContext.fill(0, barY, screenW, barY + barH, grey);
-                return;
+            int screenW = client.getWindow().getScaledWidth();
+            int screenH = client.getWindow().getScaledHeight();
+            int boxSize = (int)(scaledWidgetR * 2) + 2;
+
+            dev.chunkypregen.config.HudPosition pos =
+                    dev.chunkypregen.config.ChunkyPregenConfig.INSTANCE.hudPosition;
+            int wx, wy;
+            switch (pos) {
+                case TOP_RIGHT    -> { wx = screenW - boxSize - PAD; wy = PAD; }
+                case TOP_CENTER   -> { wx = (screenW - boxSize) / 2;  wy = PAD; }
+                case BOTTOM_LEFT  -> { wx = PAD; wy = screenH - boxSize - PAD; }
+                case BOTTOM_RIGHT -> { wx = screenW - boxSize - PAD; wy = screenH - boxSize - PAD; }
+                default           -> { wx = PAD; wy = PAD; }
             }
 
-            // Dark green = completed rings
-            float completedF = HudData.completedFraction();
-            int completedPx  = (int)(screenW * completedF);
-            if (completedPx > 0)
-                drawContext.fill(0, barY, completedPx, barY + barH, 0xFF1A4520);
+            int cx = wx + (int) scaledWidgetR + 1;
+            int cy = wy + (int) scaledWidgetR + 1;
 
-            // Neon green = current ring partial progress
-            float partialF   = HudData.currentRingPartialFraction();
-            int partialPx    = (int)(screenW * partialF);
-            if (partialPx > 0)
-                drawContext.fill(completedPx, barY, completedPx + partialPx, barY + barH, 0xFF39FF14);
+            // 1. Background circle (pre-computed, ~71 fill calls)
+            drawSpans(drawContext, cx, cy, bgSpans, COL_BG);
+
+            // 2. Ring background (pre-computed, ~142 fill calls)
+            drawSpans(drawContext, cx, cy, ringBgSpans, COL_RING_BG);
+
+            if (flashing) {
+                float alpha = 1f - (float)(now - flashMs) / HudData.COMPLETION_FLASH_MS;
+                int a = Math.max(0, Math.min(200, (int)(alpha * 200)));
+                drawSpans(drawContext, cx, cy, ringBgSpans, (a << 24) | (COL_FLASH & 0xFFFFFF));
+            } else if (active) {
+                // TOP half: current ring % — blue, arc symmetric around 12 o'clock
+                float ringPct = Math.min(1f, HudData.currentRingPct / 100f);
+                if (Math.abs(ringPct - cachedTopPct) > 0.005f) {
+                    topArcPx    = buildArcPixels(scaledRingInner, scaledRingOuter, -HALF_PI, ringPct * HALF_PI);
+                    cachedTopPct = ringPct;
+                }
+                if (topArcPx != null) drawPixels(drawContext, cx, cy, topArcPx, COL_TOP);
+
+                // BOTTOM half: batch progress — dark green, arc symmetric around 6 o'clock
+                float batchPct = Math.min(1f, HudData.completedFraction() + HudData.currentRingPartialFraction());
+                if (Math.abs(batchPct - cachedBotPct) > 0.005f) {
+                    botArcPx    = buildArcPixels(scaledRingInner, scaledRingOuter, HALF_PI, batchPct * HALF_PI);
+                    cachedBotPct = batchPct;
+                }
+                if (botArcPx != null) drawPixels(drawContext, cx, cy, botArcPx, COL_BOT);
+            }
+
+            // 3. Inner proximity circle (pre-computed)
+            if (hasCenter) {
+                drawSpans(drawContext, cx, cy, innerSpans, COL_INNER);
+                drawSpans(drawContext, cx, cy, deadzoneSpans, COL_DEAD);
+                drawContext.fill(cx, cy, cx + 1, cy + 1, COL_CENTER);
+
+                // Player dot — single pixel, computed every frame (trivial)
+                double pdx  = client.player.getX() - HudData.lastCenterX;
+                double pdz  = client.player.getZ() - HudData.lastCenterZ;
+                double dist = Math.sqrt(pdx * pdx + pdz * pdz);
+                int    trig = Math.max(1, HudData.triggerDistanceBlocks);
+                double scale2 = scaledDeadR / trig;
+                double sx = pdx * scale2, sz = pdz * scale2;
+                double len = Math.sqrt(sx * sx + sz * sz);
+                if (len > scaledDeadR + 4) { double f = (scaledDeadR + 4) / len; sx *= f; sz *= f; }
+                int dotX = (int) Math.round(cx + sx);
+                int dotY = (int) Math.round(cy + sz);
+                float prox = (float)(dist / trig);
+                int dotCol = prox < 0.6f ? 0xFFFFFFFF : prox < 0.85f ? 0xFFFFCC00 : 0xFFFF4400;
+                drawContext.fill(dotX, dotY, dotX + 1, dotY + 1, dotCol);
+            }
         });
+    }
+
+    // ── Geometry builders (called once at startup) ────────────────────────────
+
+    private static final float HALF_PI = (float)(Math.PI / 2);
+    private static final float PI_F    = (float) Math.PI;
+    private static final float TWO_PI  = PI_F * 2f;
+
+    /**
+     * Builds horizontal span data for a filled circle of radius r.
+     * Format: int[] of (dx1, dy, dx2) triples — one fill(cx+dx1, cy+dy, cx+dx2, cy+dy+1) per triple.
+     * Reduces ~3800 fill() calls to ~71 (one per row).
+     */
+    /** Symmetric horizontal spans for a filled circle centred at origin. */
+    private static int[] buildCircleSpans(float r) {
+        int bounds = (int) Math.ceil(r);
+        int[] buf = new int[(bounds * 2 + 1) * 3];
+        int n = 0;
+        for (int dy = -bounds; dy <= bounds; dy++) {
+            float hw = (float) Math.sqrt(Math.max(0f, r * r - dy * dy));
+            int halfW = Math.round(hw);
+            if (halfW > 0) { buf[n++] = -halfW; buf[n++] = dy; buf[n++] = halfW; }
+        }
+        int[] result = new int[n];
+        System.arraycopy(buf, 0, result, 0, n);
+        return result;
+    }
+
+    /** Symmetric horizontal spans for a ring (annulus) centred at origin. */
+    private static int[] buildRingSpans(float innerR, float outerR) {
+        int bounds = (int) Math.ceil(outerR);
+        int[] buf = new int[(bounds * 2 + 1) * 6];
+        int n = 0;
+        for (int dy = -bounds; dy <= bounds; dy++) {
+            float outerHw = (float) Math.sqrt(Math.max(0f, outerR * outerR - dy * dy));
+            if (outerHw <= 0f) continue;
+            int oH = Math.round(outerHw);
+            if (Math.abs(dy) >= innerR) {
+                buf[n++] = -oH; buf[n++] = dy; buf[n++] = oH;
+            } else {
+                float innerHw = (float) Math.sqrt(Math.max(0f, innerR * innerR - dy * dy));
+                int iH = Math.round(innerHw);
+                if (oH > iH) {
+                    buf[n++] = -oH; buf[n++] = dy; buf[n++] = -iH; // left span
+                    buf[n++] =  iH; buf[n++] = dy; buf[n++] =  oH; // right span
+                }
+            }
+        }
+        int[] result = new int[n];
+        System.arraycopy(buf, 0, result, 0, n);
+        return result;
+    }
+
+    /**
+     * Builds a pixel list for an arc sector of a ring.
+     * arcCenter: standard angle (0=right, π/2=down). halfSpan: arc half-width.
+     * Arc grows symmetrically from arcCenter ± halfSpan.
+     * Rebuilt only when progress changes — stored as (dx, dy) pairs.
+     */
+    private static int[] buildArcPixels(float innerR, float outerR,
+                                         float arcCenter, float halfSpan) {
+        if (halfSpan <= 0f) return new int[0];
+        int bounds = (int) Math.ceil(outerR) + 1;
+        int[] buf = new int[bounds * bounds * 2];
+        int n = 0;
+        for (int dy = -bounds; dy <= bounds; dy++) {
+            for (int dx = -bounds; dx <= bounds; dx++) {
+                float dist = (float) Math.sqrt(dx * dx + dy * dy);
+                if (dist < innerR - 0.5f || dist > outerR + 0.5f) continue;
+                float angle = (float) Math.atan2(dy, dx);
+                float diff = angle - arcCenter;
+                while (diff >  PI_F) diff -= TWO_PI;
+                while (diff < -PI_F) diff += TWO_PI;
+                if (Math.abs(diff) > halfSpan) continue;
+                buf[n++] = dx; buf[n++] = dy;
+            }
+        }
+        int[] result = new int[n];
+        System.arraycopy(buf, 0, result, 0, n);
+        return result;
+    }
+
+    // ── Render helpers ────────────────────────────────────────────────────────
+
+    /** Renders pre-computed span data with a single colour. O(spans) fill calls. */
+    private static void drawSpans(DrawContext ctx, int cx, int cy, int[] spans, int color) {
+        for (int i = 0; i < spans.length; i += 3)
+            ctx.fill(cx + spans[i], cy + spans[i+1], cx + spans[i+2], cy + spans[i+1] + 1, color);
+    }
+
+    /** Renders pre-computed pixel list with a single colour. O(pixels) fill calls. */
+    private static void drawPixels(DrawContext ctx, int cx, int cy, int[] pixels, int color) {
+        for (int i = 0; i < pixels.length; i += 2)
+            ctx.fill(cx + pixels[i], cy + pixels[i+1], cx + pixels[i] + 1, cy + pixels[i+1] + 1, color);
     }
 }

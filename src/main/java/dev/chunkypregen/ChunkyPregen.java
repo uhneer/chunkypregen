@@ -58,14 +58,18 @@ public class ChunkyPregen implements ModInitializer {
         }
 
         ChunkyPregenConfig cfg = ChunkyPregenConfig.INSTANCE;
-        LOGGER.info("[ChunkyPregen] Config loaded. enabled={}, triggerDist={}, radius={}, threads={}",
-                cfg.enabled, cfg.triggerDistance, cfg.generationRadius, cfg.chunkyThreads);
+        LOGGER.info("[ChunkyPregen] Config loaded. enabled={}, triggerDist={}, radius={}, threads={} (auto={})",
+                cfg.enabled, cfg.triggerDistance, cfg.generationRadius, cfg.resolvedThreads(), cfg.autoThreads);
 
         GenerationTracker.init();
         ChunkyPregenCommands.register();
 
         // Load tracker state when the server (world) starts
-        ServerLifecycleEvents.SERVER_STARTED.register(GenerationTracker::onWorldLoad);
+        ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+            GenerationTracker.onWorldLoad(server);
+            // Register direct progress callback so HUD percentage updates without chat interception
+            dev.chunkypregen.integration.ChunkyIntegration.registerProgressCallback();
+        });
         ServerLifecycleEvents.SERVER_STOPPING.register(GenerationTracker::onWorldUnload);
 
         // On first player join: check world-init flag and trigger pregen if needed.
@@ -96,8 +100,9 @@ public class ChunkyPregen implements ModInitializer {
             try {
                 String raw = message.getString();
                 if (ProgressRelay.isChunkyProgress(raw)) {
+                    // Always parse progress so the HUD stays updated
+                    ProgressRelay.update(raw);
                     if (cfg.progressRelay) {
-                        ProgressRelay.update(raw);
                         return false; // suppress and replace with periodic relay summary
                     }
                     // progressRelay off — let Chunky's native output through untouched

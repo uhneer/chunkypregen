@@ -40,14 +40,26 @@ public final class HudData {
     /** How long (ms) to show the grey completion bar after a bundle finishes. */
     public static final long COMPLETION_FLASH_MS = 2_000L;
 
+    // ── Proximity indicator data ───────────────────────────────────────────────
+
+    /** Last generation center X (block coordinate). */
+    public static volatile double lastCenterX = 0;
+    /** Last generation center Z (block coordinate). */
+    public static volatile double lastCenterZ = 0;
+    /** Current trigger deadzone in blocks. Updated when config changes or bundle fires. */
+    public static volatile int    triggerDistanceBlocks = 2000;
+
     // ── Helpers called from server thread ─────────────────────────────────────
 
-    public static void onBundleStart(int totalRings) {
-        HudData.active           = true;
-        HudData.currentRingIndex = 0;
-        HudData.totalRings       = totalRings;
-        HudData.currentRingPct   = 0f;
+    public static void onBundleStart(int totalRings, double centerX, double centerZ) {
+        HudData.active            = true;
+        HudData.currentRingIndex  = 0;
+        HudData.totalRings        = totalRings;
+        HudData.currentRingPct    = 0f;
         HudData.completionFlashMs = 0L;
+        HudData.lastCenterX       = centerX;
+        HudData.lastCenterZ       = centerZ;
+        HudData.triggerDistanceBlocks = dev.chunkypregen.config.ChunkyPregenConfig.INSTANCE.triggerDistance;
     }
 
     public static void onRingAdvance(int newRingIndex) {

@@ -159,7 +159,7 @@ public class ChunkyPregenCommands {
         src.sendFeedback(() -> Text.literal(
             "§7Trigger: §f" + cfg.triggerDistance + " blocks" +
             "  Radius: §f" + cfg.generationRadius + " chunks" +
-            "  Threads: §f" + cfg.chunkyThreads), false);
+            "  Threads: §f" + cfg.resolvedThreads() + (cfg.autoThreads ? " §7(auto)" : "")), false);
 
         if (VoxyIntegration.PRESENT) {
             int vr = VoxyIntegration.getRenderDistanceChunks();
