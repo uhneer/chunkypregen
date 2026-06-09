@@ -215,6 +215,8 @@ public class ChunkyPregenClient implements ClientModInitializer {
         HudRenderCallback.EVENT.register((drawContext, tickDelta) -> {
             MinecraftClient client = MinecraftClient.getInstance();
             if (client == null || client.world == null || client.player == null) return;
+            // Master switch — when ChunkyPregen is disabled, hide the HUD entirely (core off + GUI gone).
+            if (!dev.chunkypregen.config.ChunkyPregenConfig.INSTANCE.enabled) return;
 
             // Rebuild geometry if scale changed (rare — only when user moves the slider)
             float scale = dev.chunkypregen.config.ChunkyPregenConfig.INSTANCE.hudScale;

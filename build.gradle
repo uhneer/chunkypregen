@@ -20,7 +20,7 @@ dependencies {
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
-    // Sodium — local jar from games folder (parent of this project)
+    // Sodium — local jar from games folder (parent of this project), compile-only.
     modCompileOnly files("../sodium-fabric-0.8.12+mc1.21.11.jar")
 }
 

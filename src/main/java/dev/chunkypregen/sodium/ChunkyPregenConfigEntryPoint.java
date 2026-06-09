@@ -64,10 +64,17 @@ public class ChunkyPregenConfigEntryPoint implements ConfigEntryPoint {
         OptionGroupBuilder main = b.createOptionGroup().setName(Text.literal("Generation"));
 
         main.addOption(b.createBooleanOption(Identifier.of(ns, "enabled"))
-                .setName(Text.literal("Enable Auto-generation"))
-                .setTooltip(Text.literal("Automatically pre-generates chunks around players as they move. Disabling stops new jobs from starting but does not cancel a running one — use Stop below."))
+                .setName(Text.literal("Enable Chunky Pregenerator"))
+                .setTooltip(Text.literal("Master switch for the entire mod. When OFF, no generation runs AND the HUD widget is hidden — the mod is effectively dormant. (Does not cancel an already-running job; use Stop below for that.)"))
                 .setDefaultValue(true)
                 .setBinding(v -> { cfg.enabled = v; cfg.save(); }, () -> cfg.enabled)
+                .setStorageHandler(cfg::save));
+
+        main.addOption(b.createBooleanOption(Identifier.of(ns, "auto_retrigger"))
+                .setName(Text.literal("Auto-retrigger on Movement"))
+                .setTooltip(Text.literal("When ON, a new bundle fires automatically once you move past the deadzone — checked every Position Check Interval (your poll rate), not every tick. When OFF, generation only runs on world join or manual trigger; moving never retriggers."))
+                .setDefaultValue(true)
+                .setBinding(v -> { cfg.autoRetrigger = v; cfg.save(); }, () -> cfg.autoRetrigger)
                 .setStorageHandler(cfg::save));
 
         if (!GenerationTracker.chunkyAvailable) {
@@ -272,11 +279,14 @@ public class ChunkyPregenConfigEntryPoint implements ConfigEntryPoint {
                 .setStorageHandler(cfg::save));
 
         threads.addOption(b.createIntegerOption(Identifier.of(ns, "chunky_threads"))
-                .setName(Text.literal("§mThread Count"))
-                .setTooltip(Text.literal("Manual thread count. Only active when Automatic is OFF. More threads = faster gen, more lag while running."))
+                .setName(Text.literal("Thread Count"))
+                .setTooltip(Text.literal("Manual thread count. Unlocks only when Automatic Thread Count is OFF. More threads = faster gen, more lag while running."))
                 .setRange(2, cpuThreads, 1)
                 .setDefaultValue(autoCount)
-                .setEnabled(!cfg.autoThreads)
+                // Dynamically enabled: unlocks the moment Automatic Thread Count is toggled OFF.
+                .setEnabledProvider(
+                        state -> !state.readBooleanOption(Identifier.of(ns, "auto_threads")),
+                        Identifier.of(ns, "auto_threads"))
                 .setValueFormatter(v -> Text.literal(v + " / " + cpuThreads + " threads"))
                 .setBinding(v -> { cfg.chunkyThreads = v; cfg.save(); }, () -> cfg.autoThreads ? autoCount : cfg.chunkyThreads)
                 .setStorageHandler(cfg::save));

@@ -46,6 +46,8 @@ It also forces a Voxy LOD rebuild at the start of each bundle by briefly expandi
 
 **Sodium settings UI** — all settings are exposed in a dedicated page in Sodium's video settings, with live tooltips that show what Voxy's render distance is actually reading as.
 
+**On-screen HUD** — a compact radial widget (top-left by default) shows the current ring %, the overall batch %, and your position relative to the deadzone. The master **Enable Chunky Pregenerator** switch makes the mod fully dormant *and* hides the HUD when off.
+
 **Server and singleplayer** — runs on dedicated servers and singleplayer integrated servers. Client-side mods (Sodium, Voxy) are optional.
 
 ---
@@ -76,16 +78,21 @@ Drop the jar into your `mods/` folder. Config generates on first launch at `conf
 
 | Setting | Default | Notes |
 |---|---|---|
-| Generation radius | 250 chunks | 4000 block radius |
-| Deadzone | 2000 blocks | Half of 250 chunks x 16 |
+| ChunkyPregen enabled | On | Master switch — when off, no generation runs **and** the HUD widget is hidden |
+| Generation radius | 100 chunks | 1600 block radius |
+| Deadzone | 800 blocks | Half of 100 chunks x 16 |
+| Auto-retrigger on movement | On | When off, generation only runs on world join or manual `/chunkypregen trigger` |
+| Automatic thread count | Off | When off, the Thread Count slider is used |
+| Thread count | 6 | Chunky worker threads (used when Automatic is off) |
 | Voxy integration | Off | Enable to let Voxy's render distance drive the radius |
 | Skip creative players | Off | Creative mode players count toward movement triggers |
 | Nether auto-scale | On | Nether radius = global / 8 |
 | TPS auto-pause | On | Pause at 15 TPS, resume at 18 |
 | Spiral generation | On | Quadratic ease-in ring curve |
-| End pre-gen | Off | Only fires after a player visits The End |
+| End pre-gen | On | Still only fires after a player visits The End |
 | Join delay | 15 seconds | Lets Chunky-Offline and Sodium finish initializing first |
 | Progress relay | Every 5 minutes | Replaces Chunky's per-second log spam |
+| HUD position / scale | Top-left, 0.7 | On-screen generation HUD widget |
 | Debug mode | Off | |
 
 ---
@@ -111,7 +118,7 @@ All require op level 2.
 
 ## How the spiral curve works
 
-Ring radii follow `radius x ((i+1)/N)^2`. Ring count N scales automatically with radius and `generationRingStep`. At 250 chunks with default step of 25, you get 13 rings. At 1000 chunks you get 20. Each ring fires sequentially and the next ring only starts after `isRunning()` confirms the current one is done.
+Ring radii follow `radius x ((i+1)/N)^2`. Ring count N scales automatically with radius and `generationRingStep` (smaller step = more, finer rings). Each ring fires sequentially and the next ring only starts after `isRunning()` confirms the current one is done.
 
 The quadratic curve means ring 1 covers the innermost ~1% of the area and the outer rings get progressively larger. The area near the player is always the first thing finished.
 

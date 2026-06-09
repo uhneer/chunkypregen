@@ -3,7 +3,7 @@
   "package": "dev.chunkypregen.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [],
-  "client": [],
+  "client": ["MixinBossBarHud"],
   "injectors": {
     "defaultRequire": 0
   }

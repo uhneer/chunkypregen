@@ -310,7 +310,7 @@ public class GenerationTracker {
                     StateSerializer.save(server, lastCenters, endVisited, Map.of());
                 }
 
-                if (distSq >= trigger * trigger) {
+                if (cfg.autoRetrigger && distSq >= trigger * trigger) {
                     maybeFireJob(server, dim, playerPos);
                     break;
                 }

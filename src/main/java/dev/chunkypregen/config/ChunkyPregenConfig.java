@@ -39,9 +39,17 @@ public class ChunkyPregenConfig {
 
     // ── Trigger thresholds ────────────────────────────────────────────────────
     // triggerDistance = generationRadius / 2 * 16 (half the gen radius, in blocks)
-    public int triggerDistance    = 2000;
-    public int generationRadius   = 250;
+    public int triggerDistance    = 800;
+    public int generationRadius   = 100;
     public int checkIntervalTicks = 200;
+
+    /**
+     * When true, a new generation bundle auto-fires once you move past the deadzone
+     * (evaluated only every checkIntervalTicks — the poll rate — not every tick). When
+     * false, generation only runs on world join or manual trigger; moving never retriggers.
+     * Default: true.
+     */
+    public boolean autoRetrigger = true;
 
     // ── Per-dimension radius overrides (-1 = inherit global / Voxy radius) ───
     public int overworldRadius = -1;
@@ -51,7 +59,7 @@ public class ChunkyPregenConfig {
     // ── Dimension toggles ─────────────────────────────────────────────────────
     public boolean enableOverworld = true;
     public boolean enableNether    = true;
-    public boolean enableEnd       = false;
+    public boolean enableEnd       = true;
 
     // ── Join delay ────────────────────────────────────────────────────────────
     /**
@@ -90,9 +98,9 @@ public class ChunkyPregenConfig {
     // ── Concurrency ───────────────────────────────────────────────────────────
     public int maxConcurrentDimensions = 1;
     /** When true, chunkyThreads is ignored and 25% of logical CPU cores is used automatically. */
-    public boolean autoThreads = true;
+    public boolean autoThreads = false;
     /** Number of Chunky worker threads. Only used when autoThreads is false. */
-    public int chunkyThreads = Math.max(1, (int) Math.round(Runtime.getRuntime().availableProcessors() * 0.25));
+    public int chunkyThreads = 6;
 
     // ── LOD refresh ───────────────────────────────────────────────────────────
     /**
@@ -106,7 +114,7 @@ public class ChunkyPregenConfig {
     /** Screen corner/position for the generation HUD widget. */
     public HudPosition hudPosition = HudPosition.TOP_LEFT;
     /** Scale multiplier for the HUD widget. 1.0 = default size. */
-    public float hudScale = 1.0f;
+    public float hudScale = 0.7f;
 
     // ── Voxy integration ──────────────────────────────────────────────────────
     /** Use Voxy's LOD render distance to drive generation radius and trigger distance. */
@@ -131,7 +139,7 @@ public class ChunkyPregenConfig {
      *  so each successive ring only generates the new outer band. */
     public boolean spiralGeneration   = true;
     /** Controls ring density for the quadratic spiral curve. Smaller = more rings / finer near player. */
-    public int     generationRingStep = 25;
+    public int     generationRingStep = 10;
 
     // ── Shape ─────────────────────────────────────────────────────────────────
     public GenerationShape shape = GenerationShape.CIRCLE;
@@ -172,6 +180,7 @@ public class ChunkyPregenConfig {
             this.triggerDistance            = loaded.triggerDistance;
             this.generationRadius           = loaded.generationRadius;
             this.checkIntervalTicks         = loaded.checkIntervalTicks;
+            this.autoRetrigger              = loaded.autoRetrigger;
             this.overworldRadius            = loaded.overworldRadius;
             this.netherRadius               = loaded.netherRadius;
             this.endRadius                  = loaded.endRadius;
